@@ -1,0 +1,21 @@
+[Unit]
+Description=Campus Marketplace FastAPI ML Microservice
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/campus-marketplace/ml-service
+Environment="PYTHONUNBUFFERED=1"
+ExecStart=/home/ubuntu/campus-marketplace/ml-service/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
+Restart=always
+RestartSec=5s
+
+# Process security sandboxing & resource limits
+LimitNOFILE=65536
+StandardOutput=journal
+StandardError=journal
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
