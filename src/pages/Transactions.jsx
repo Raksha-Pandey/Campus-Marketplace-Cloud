@@ -11,11 +11,12 @@ export default function Transactions() {
   const [tab, setTab] = useState('all')
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState('')
+  const [payments, setPayments] = useState([])
 
   const load = () => {
     api.getTransactions().then(setTxns).catch(() => setTxns([])).finally(() => setLoading(false))
   }
-  useEffect(() => { load() }, [])
+  useEffect(() => { load(); api.getPayments().then(setPayments).catch(() => setPayments([])) }, [])
 
   const filtered = txns.filter((t) => {
     if (tab === 'borrowed') return String(t.borrowerId) === String(user?.id || user?._id)
@@ -96,6 +97,32 @@ export default function Transactions() {
               </div>
             )
           })}
+        </div>
+      )}
+      {payments.length > 0 && (
+        <div className="mt-8">
+          <h2 className="font-display font-semibold text-base mb-3">Payment history</h2>
+          <div className="bg-white border border-ink/20 rounded-md divide-y divide-line">
+            {payments.map((pay) => (
+              <div key={pay.id} className="p-3.5 flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{pay.itemTitle || 'Campus item'}</p>
+                  <p className="text-[11px] text-ink-soft">
+                    {pay.role === 'seller' ? 'You sold' : 'You bought'} · {new Date(pay.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} · {pay.provider === 'dev' ? 'simulated' : 'Razorpay'}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="font-mono text-sm font-semibold">{pay.role === 'seller' ? '+' : '−'}₹{pay.amount}</p>
+                  <span className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded-full border ${
+                    pay.status === 'paid' ? 'bg-moss-bg text-moss-ink border-moss-ink/30'
+                      : pay.status === 'refunded' ? 'bg-sky-bg text-sky-ink border-sky-ink/30'
+                        : pay.status === 'created' ? 'bg-yellow-bg text-yellow-ink border-yellow-ink/30'
+                          : 'bg-coral-bg text-coral-ink border-coral-ink/30'
+                  }`}>{pay.status === 'created' ? 'pending' : pay.status}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
       <div className="flex flex-col items-center text-center text-ink-soft mt-10">

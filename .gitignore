@@ -7,52 +7,33 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# Dependencies
 node_modules
 server/node_modules
-
-# Build outputs
 dist
 dist-ssr
-build
-
-# Environment files & secrets (preserve examples)
-.env
-.env.*
-!.env.example
-server/.env
-server/.env.*
-!server/.env.example
 *.local
-*.pem
-*.key
-*.cert
-*.crt
-id_rsa*
-
-# Python virtual environments & bytecode
+.env
+server/.env
+server/.env.local
 ml-service/.venv
 .venv
-venv/
-env/
-ENV/
 ml-service/models_store/*.joblib
 __pycache__/
 *.pyc
-*.py[cod]
-*$py.class
-*.pytest_cache/
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
-**/.DS_Store
-._*
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
 
+# local image storage (dev)
+server/uploads/*
+!server/uploads/.gitkeep
+server/data/
+*.tar.gz

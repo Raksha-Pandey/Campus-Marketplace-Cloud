@@ -1,6 +1,7 @@
 import { Heart, MapPin } from 'lucide-react'
 import WashiTape from './WashiTape'
 import TrustBadge from './TrustBadge'
+import { thumb } from '../utils/geo'
 
 const bgMap = {
   sky: 'bg-sky-bg', coral: 'bg-coral-bg', yellow: 'bg-yellow-bg', moss: 'bg-moss-bg',
@@ -31,8 +32,12 @@ export default function ProductCard({ item, index = 0, favorited, onToggleFavori
         <Heart size={13} className={favorited ? 'fill-tape-coral text-tape-coral' : 'text-ink-soft'} />
       </button>
 
-      <div className={`h-28 rounded-[3px] border border-ink/70 flex items-center justify-center ${bgMap[item.bg]}`}>
-        <Icon size={36} className={iconInkMap[item.bg]} strokeWidth={1.6} />
+      <div className={`h-28 rounded-[3px] border border-ink/70 flex items-center justify-center overflow-hidden ${bgMap[item.bg]}`}>
+        {item.images?.[0] ? (
+          <img src={thumb(item.images[0], 400)} alt={item.title} loading="lazy" className="w-full h-full object-cover" />
+        ) : (
+          <Icon size={36} className={iconInkMap[item.bg]} strokeWidth={1.6} />
+        )}
       </div>
 
       <div className="mt-2.5 space-y-1">

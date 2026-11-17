@@ -37,7 +37,7 @@ const TITLE_HINTS = [
   [/drafter|lab coat|apron|multimeter/i, 499],
 ]
 
-const LEND_RATES = { day: 0.05, week: 0.16, semester: 0.4 }
+const LEND_RATES = { day: 0.02, week: 0.07, semester: 0.25 }
 
 export function typicalMrp({ category, title, brand } = {}) {
   const text = `${title || ''} ${brand || ''}`
@@ -84,7 +84,7 @@ export function campusFairPrice(payload = {}) {
   let rec = usedValue(original, condition, age, payload.category)
   if (listingType === 'lend') {
     rec *= LEND_RATES[lendUnit] || LEND_RATES.day
-    const minRent = lendUnit === 'day' ? 20 : lendUnit === 'week' ? 60 : 150
+    const minRent = lendUnit === 'day' ? 10 : lendUnit === 'week' ? 40 : 100
     rec = Math.max(minRent, Math.min(original * 0.25, rec))
   } else {
     rec = Math.max(40, Math.min(original * 0.97, rec))
@@ -108,21 +108,26 @@ export function campusFairPrice(payload = {}) {
   }
 }
 
+/**
+ * Trust the trained model; only fall back to the formula when its answer is unusable.
+ * (The previous version blended 65% formula + 35% model, which hid the model entirely.)
+ */
 export function sanitizePredictedPrice(ml, heuristic) {
   const base = Number(heuristic?.recommendedPrice) || 0
-  if (base <= 0) return heuristic
   const rec = Number(ml?.recommendedPrice)
-  const off = !Number.isFinite(rec) || rec <= 0 || rec > base * 1.8 || rec < base * 0.45
-  const next = Math.max(1, Math.round(off ? base : base * 0.65 + rec * 0.35))
+  const unusable = !Number.isFinite(rec) || rec <= 0 || (base > 0 && (rec > base * 4 || rec < base / 4))
+  if (unusable) return heuristic
+  const min = Number(ml.minFairPrice)
+  const max = Number(ml.maxFairPrice)
   return {
-    recommendedPrice: next,
-    minFairPrice: Math.max(1, Math.round(next * 0.88)),
-    maxFairPrice: Math.round(next * 1.12),
-    confidence: Math.min(88, Math.max(55, Number(ml?.confidence) || heuristic.confidence || 72)),
-    explanation: heuristic.explanation,
-    source: ml?.source ? 'ml+heuristic' : heuristic.source || 'heuristic',
-    metrics: ml?.metrics,
-    usedTypicalMrp: heuristic.usedTypicalMrp,
+    recommendedPrice: Math.round(rec),
+    minFairPrice: Number.isFinite(min) && min > 0 ? Math.round(Math.min(min, rec)) : Math.max(1, Math.round(rec * 0.88)),
+    maxFairPrice: Number.isFinite(max) && max > 0 ? Math.round(Math.max(max, rec)) : Math.round(rec * 1.12),
+    confidence: Math.min(95, Math.max(30, Number(ml.confidence) || 60)),
+    explanation: ml.explanation || heuristic?.explanation || '',
+    source: ml.source || 'ml',
+    metrics: ml.metrics,
+    usedTypicalMrp: Boolean(ml.usedTypicalMrp ?? heuristic?.usedTypicalMrp),
   }
 }
 

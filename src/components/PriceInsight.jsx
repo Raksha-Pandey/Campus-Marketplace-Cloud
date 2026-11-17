@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Sparkles, ChevronDown } from 'lucide-react'
 
-export default function PriceInsight({ fairMin, fairMax, price, confidence, explanation, unavailable, recommendedPrice, usedTypicalMrp }) {
+export default function PriceInsight({ fairMin, fairMax, price, confidence, explanation, unavailable, recommendedPrice, usedTypicalMrp, source, comparables }) {
   const [showWhy, setShowWhy] = useState(false)
 
   if (unavailable) {
@@ -42,12 +42,22 @@ export default function PriceInsight({ fairMin, fairMax, price, confidence, expl
         <Sparkles size={15} />
         AI Price Insight
       </div>
-      <p className="text-sm mb-1">AI-estimated fair price</p>
+      <p className="text-sm mb-1 flex items-center gap-2">
+        AI-estimated fair price
+        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full border border-yellow-ink/30 bg-white">
+          {source === 'ml' ? 'ML model' : 'formula estimate'}
+        </span>
+      </p>
       <p className="font-mono font-semibold text-lg">
         ₹{min} – ₹{max}
       </p>
       {rec > 0 ? (
         <p className="text-xs text-ink-soft mt-0.5">Suggested asking ₹{rec}</p>
+      ) : null}
+      {comparables ? (
+        <p className="text-xs text-ink-soft mt-2">
+          Similar items on campus: median ₹{comparables.median} (middle half ₹{comparables.p25}–₹{comparables.p75}, {comparables.count} listings)
+        </p>
       ) : null}
       {usedTypicalMrp ? (
         <p className="text-xs text-coral-ink mt-2">Original/MRP looks too low, so this range uses a typical campus price for this category/item.</p>

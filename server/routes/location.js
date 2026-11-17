@@ -2,7 +2,8 @@ import { Router } from 'express'
 import User from '../models/User.js'
 import Listing from '../models/Listing.js'
 import { requireAuth, requireVerified, publicUser } from '../middleware/auth.js'
-import { encodeGeohash, haversineKm, roundDistanceKm } from '../utils/geohash.js'
+import { encodeGeohash, validCoords } from '../utils/geohash.js'
+import { findNearby, NearbyError } from '../utils/nearby.js'
 import { serializeListing } from './listings.js'
 
 const router = Router()
@@ -25,10 +26,14 @@ router.put('/preferences', requireAuth, requireVerified, async (req, res) => {
       req.user.locationExact = undefined
       req.user.locationApprox = { geohash: null, label: '' }
       req.user.locationUpdatedAt = null
-      await Listing.updateMany(
-        { 'seller.userId': req.user._id },
-        { $unset: { geo: 1, geoHash: 1 }, $set: { locationSharingEnabled: false } }
-      )
+      // Turning off *your own* discovery does not silently change your listings; pass clearListings:true to
+      // also stop sharing the location of every listing you posted.
+      if (req.body.clearListings) {
+        await Listing.updateMany(
+          { 'seller.userId': req.user._id },
+          { $unset: { geo: 1, geoHash: 1 }, $set: { locationSharingEnabled: false } }
+        )
+      }
     }
     await req.user.save()
     res.json(stripExact(req.user))
@@ -44,7 +49,7 @@ router.put('/', requireAuth, requireVerified, async (req, res) => {
     }
     const lat = Number(req.body.lat ?? req.body.latitude)
     const lon = Number(req.body.lon ?? req.body.lng ?? req.body.longitude)
-    if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+    if (!validCoords(lat, lon)) {
       return res.status(400).json({ error: 'Valid latitude and longitude are required' })
     }
     req.user.locationExact = { type: 'Point', coordinates: [lon, lat] }
@@ -62,45 +67,15 @@ router.put('/', requireAuth, requireVerified, async (req, res) => {
 
 router.get('/nearby', requireAuth, requireVerified, async (req, res) => {
   try {
-    const me = await User.findById(req.user._id).select('+locationExact locationSharingEnabled locationUpdatedAt locationApprox')
-    if (!me.locationSharingEnabled) {
-      return res.status(400).json({ error: 'Nearby discovery is off' })
-    }
-    if (!me.locationExact?.coordinates) {
-      return res.status(400).json({ error: 'Location permission denied or location not stored' })
-    }
-    if (me.locationUpdatedAt && Date.now() - new Date(me.locationUpdatedAt).getTime() > STALE_MS) {
-      me.locationSharingEnabled = false
-      me.locationExact = undefined
-      await me.save()
-      return res.status(400).json({ error: 'Stored location expired. Enable discovery again.' })
-    }
-
-    const radius = Number(req.query.radiusKm || 3)
-    const listings = await Listing.find({
-      status: 'active',
-      locationSharingEnabled: true,
-      geo: {
-        $near: {
-          $geometry: { type: 'Point', coordinates: me.locationExact.coordinates },
-          $maxDistance: radius * 1000,
-        },
-      },
-    }).lean()
-
-    res.json(
-      listings.map((l) => {
-        const serialized = serializeListing(l, { viewer: me })
-        if (l.geo?.coordinates) {
-          serialized.distanceKm = roundDistanceKm(
-            haversineKm(me.locationExact.coordinates[1], me.locationExact.coordinates[0], l.geo.coordinates[1], l.geo.coordinates[0])
-          )
-          serialized.distanceLabel = `~${serialized.distanceKm} km away`
-        }
-        return serialized
-      })
-    )
+    const me = await User.findById(req.user._id).select('locationExact locationSharingEnabled locationUpdatedAt locationApprox')
+    const { items } = await findNearby(me, { status: 'active' }, req.query.radiusKm)
+    res.json(items.map(({ listing, distanceKm }) => ({
+      ...serializeListing(listing, { viewer: me }),
+      distanceKm,
+      distanceLabel: `~${distanceKm} km away`,
+    })))
   } catch (err) {
+    if (err instanceof NearbyError) return res.status(err.code).json({ error: err.message })
     res.status(500).json({ error: err.message })
   }
 })

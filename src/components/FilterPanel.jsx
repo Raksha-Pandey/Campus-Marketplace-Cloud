@@ -64,6 +64,18 @@ export default function FilterPanel({ filters, setFilters }) {
         />
         Nearby only
       </label>
+      {filters.nearby && (
+        <div>
+          <p className="text-xs font-medium text-ink-soft mb-2 font-mono uppercase tracking-wide">Within {filters.radiusKm || 3} km</p>
+          <input
+            type="range" min="0.5" max="10" step="0.5"
+            value={filters.radiusKm || 3}
+            onChange={(e) => setFilters((f) => ({ ...f, radiusKm: Number(e.target.value) }))}
+            className="w-full accent-tape-coral"
+          />
+          <p className="text-[11px] text-ink-soft mt-1">Only items whose sellers chose to share location appear here.</p>
+        </div>
+      )}
 
       <div>
         <p className="text-xs font-medium text-ink-soft mb-2 font-mono uppercase tracking-wide">Sort by</p>
@@ -77,7 +89,7 @@ export default function FilterPanel({ filters, setFilters }) {
       </div>
 
       <button
-        onClick={() => setFilters({ condition: '', maxPrice: 50000, nearby: false, sort: 'recent' })}
+        onClick={() => setFilters({ condition: '', maxPrice: 50000, nearby: false, sort: 'recent', radiusKm: 3 })}
         className="w-full text-xs font-medium text-ink-soft hover:text-ink underline underline-offset-2"
       >
         Clear all filters

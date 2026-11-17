@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, Link } from 'react-router-dom'
 import { SlidersHorizontal, X } from 'lucide-react'
 import CategoryDropdown from '../components/CategoryDropdown'
 import FilterPanel from '../components/FilterPanel'
@@ -12,7 +12,7 @@ export default function BuyBorrow({ search, favorites, onToggleFavorite, onOpenP
   const [mode, setMode] = useState('buy') // buy | borrow
   const [category, setCategory] = useState('')
   const [showFilters, setShowFilters] = useState(false)
-  const [filters, setFilters] = useState({ condition: '', maxPrice: 50000, nearby: false, sort: 'recent' })
+  const [filters, setFilters] = useState({ condition: '', maxPrice: 50000, nearby: false, sort: 'recent', radiusKm: 3 })
   const [listings, setListings] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -25,16 +25,16 @@ export default function BuyBorrow({ search, favorites, onToggleFavorite, onOpenP
     let cancelled = false
     setLoading(true)
     setError('')
-    const loader = filters.nearby || filters.sort === 'nearby'
-      ? api.getNearby()
-      : api.getListings({
-        type: mode === 'buy' ? 'buy' : 'lend',
-        category: category || undefined,
-        search: search || undefined,
-        condition: filters.condition || undefined,
-        maxPrice: filters.maxPrice,
-        sort: filters.sort,
-      })
+    const wantNearby = filters.nearby || filters.sort === 'nearby'
+    const loader = api.getListings({
+      type: mode === 'buy' ? 'buy' : 'lend',
+      category: category || undefined,
+      search: search || undefined,
+      condition: filters.condition || undefined,
+      maxPrice: filters.maxPrice,
+      sort: filters.sort,
+      ...(wantNearby ? { nearby: 'true', radiusKm: filters.radiusKm } : {}),
+    })
     loader
       .then((data) => {
         if (!cancelled) setListings(hydrateListings(data))
@@ -49,7 +49,7 @@ export default function BuyBorrow({ search, favorites, onToggleFavorite, onOpenP
         if (!cancelled) setLoading(false)
       })
     return () => { cancelled = true }
-  }, [mode, category, search, filters.condition, filters.maxPrice, filters.sort, filters.nearby])
+  }, [mode, category, search, filters.condition, filters.maxPrice, filters.sort, filters.nearby, filters.radiusKm])
 
   const filtered = useMemo(() => {
     let items = listings
@@ -114,7 +114,12 @@ export default function BuyBorrow({ search, favorites, onToggleFavorite, onOpenP
         {loading ? (
           <p className="text-sm text-ink-soft py-10">Loading from MongoDB...</p>
         ) : error ? (
-          <p className="text-sm text-coral-ink py-10">{error}. Is the backend running on port 5001?</p>
+          <div className="py-10 text-sm">
+            <p className="text-coral-ink">{error}</p>
+            {/nearby|location/i.test(error) && (
+              <p className="text-ink-soft mt-2">Nearby search is optional and off by default. <Link to="/profile" className="underline">Turn it on in Profile</Link> or untick “Nearby only”.</p>
+            )}
+          </div>
         ) : (
           <ProductGrid
             items={filtered}

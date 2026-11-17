@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireAuth, requireVerified } from '../middleware/auth.js'
-import { recommendPrice, assessListingFraud } from '../utils/ai.js'
+import { recommendPrice, assessListingFraud, marketComparables } from '../utils/ai.js'
 
 const router = Router()
 
@@ -21,7 +21,8 @@ router.post('/price-predict', requireAuth, requireVerified, async (req, res) => 
       listingType: listingType || 'sale',
       lendUnit: lendUnit || 'day',
     })
-    res.json(result)
+    const comparables = await marketComparables({ category, listingType: listingType || 'sale', condition })
+    res.json({ ...result, comparables })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 
-process.env.USE_MEMORY_DB = 'true'
+process.env.USE_MEMORY_DB = process.env.USE_MEMORY_DB || 'true'
 process.env.DEV_RETURN_OTP = 'true'
 process.env.JWT_SECRET = 'test-jwt'
 process.env.OTP_PEPPER = 'test-otp'
@@ -231,7 +231,8 @@ test('borrow/lend workflow', async () => {
 
 test('payments create/verify/invalid signature', async () => {
   const { token } = await login('riya.sharma@campus.edu', 'CampusDemo123!')
-  const listings = (await api('/listings?type=buy', { token })).data
+  const me = (await api('/auth/me', { token })).data
+  const listings = (await api('/listings?type=buy', { token })).data.filter((l) => String(l.seller?.userId) !== String(me.id))
   const sale = listings.find((l) => l.status === 'active')
   const order = await api('/payments/create-order', { method: 'POST', token, body: { listingId: sale.id } })
   assert.equal(order.status, 201)
@@ -246,7 +247,7 @@ test('payments create/verify/invalid signature', async () => {
   const ok = await api('/payments/verify', { method: 'POST', token, body: signed.data })
   assert.equal(ok.status, 200)
   const soldAgain = await api('/payments/create-order', { method: 'POST', token, body: { listingId: sale.id } })
-  assert.equal(soldAgain.status, 400)
+  assert.equal(soldAgain.status, 409)
 
   const otherSale = listings.find((l) => l.id !== sale.id && l.status === 'active')
   assert.ok(otherSale)

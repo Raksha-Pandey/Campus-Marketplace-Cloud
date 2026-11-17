@@ -1,50 +1,40 @@
 from pathlib import Path
 import json
 import joblib
-import numpy as np
-import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
 MODELS = ROOT / "models_store"
-PRICE_BUNDLE = MODELS / "price_rf.joblib"
+PRICE_BUNDLE = MODELS / "price_gbm.joblib"
 FRAUD_BUNDLE = MODELS / "fraud_iforest.joblib"
 METRICS_PATH = MODELS / "price_metrics.json"
-
-CONDITION_ORDER = ["Fair", "Good", "Like New", "New"]
-CATEGORIES = ["books", "cycles", "electronics", "lab", "furniture", "hostel", "notes", "other"]
-TYPES = ["sale", "lend"]
-
-
-def encode_features(row: dict) -> np.ndarray:
-    cat = CATEGORIES.index(row.get("category", "other")) if row.get("category") in CATEGORIES else len(CATEGORIES) - 1
-    cond = CONDITION_ORDER.index(row.get("condition", "Good")) if row.get("condition") in CONDITION_ORDER else 1
-    ltype = 1 if row.get("listingType") == "lend" else 0
-    brand = str(row.get("brand") or "").lower()
-    brand_len = min(len(brand), 24)
-    return np.array(
-        [
-            float(row.get("originalPrice") or 0),
-            float(row.get("ageMonths") or 0),
-            float(row.get("demand") or 50),
-            cat,
-            cond,
-            ltype,
-            brand_len,
-        ],
-        dtype=float,
-    )
-
+FRAUD_METRICS_PATH = MODELS / "fraud_metrics.json"
 
 def load_price_model():
+    """Load the price bundle; return None (so the API reports 503) if it is missing or unreadable."""
     if not PRICE_BUNDLE.exists():
         return None
-    return joblib.load(PRICE_BUNDLE)
+    try:
+        bundle = joblib.load(PRICE_BUNDLE)
+    except Exception as exc:  # incompatible scikit-learn version, corrupt file...
+        print(f"[ml] could not load price model: {exc}")
+        return None
+    return bundle if isinstance(bundle, dict) and "models" in bundle else None
 
 
 def load_fraud_model():
+    """Return a FraudScorer, or None if the bundle is missing / from the old v2 format / unreadable."""
     if not FRAUD_BUNDLE.exists():
         return None
-    return joblib.load(FRAUD_BUNDLE)
+    try:
+        bundle = joblib.load(FRAUD_BUNDLE)
+    except Exception as exc:
+        print(f"[ml] could not load fraud model: {exc}")
+        return None
+    if not isinstance(bundle, dict) or "anchor_raw" not in bundle:
+        return None  # old bundle -> startup hook retrains
+    from app.services.fraud_model import FraudScorer
+
+    return FraudScorer(bundle)
 
 
 def load_metrics():
@@ -53,43 +43,9 @@ def load_metrics():
     return {}
 
 
-def fraud_vector(payload: dict) -> np.ndarray:
-    keys = [
-        "price",
-        "originalPrice",
-        "priceRatio",
-        "originalRatio",
-        "titleLength",
-        "descriptionLength",
-        "duplicateTitleCount",
-        "duplicateContentCount",
-        "listingBurst1h",
-        "confirmedReports",
-        "recentTransactions24h",
-        "accountAgeDays",
-        "verified",
-    ]
-    return np.array([[float(payload.get(k) or 0) for k in keys]], dtype=float)
+def load_fraud_metrics():
+    if FRAUD_METRICS_PATH.exists():
+        return json.loads(FRAUD_METRICS_PATH.read_text())
+    return {}
 
 
-def signals_from_payload(payload: dict, score: float) -> list[str]:
-    out = []
-    if float(payload.get("duplicateTitleCount") or 0) >= 2:
-        out.append("duplicate_listing_title")
-    if float(payload.get("duplicateContentCount") or 0) >= 2:
-        out.append("duplicate_description")
-    if float(payload.get("listingBurst1h") or 0) >= 4:
-        out.append("listing_burst")
-    if float(payload.get("confirmedReports") or 0) >= 1:
-        out.append("prior_confirmed_reports")
-    orig = float(payload.get("originalPrice") or 0)
-    ratio = float(payload.get("originalRatio") or 1)
-    if orig > 2000 and 0 < ratio < 0.2:
-        out.append("extreme_price_deviation")
-    if float(payload.get("accountAgeDays") or 30) < 1 and float(payload.get("listingBurst1h") or 0) >= 2:
-        out.append("new_account_burst")
-    if not out and score >= 0.4:
-        out.append("multivariate_anomaly")
-    if not out:
-        out.append("no_strong_anomaly")
-    return out

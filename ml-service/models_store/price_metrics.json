@@ -1,17 +1,76 @@
 {
-  "validation": {
-    "MAE": 721.04,
-    "RMSE": 1723.94,
-    "R2": 0.953
+  "model": "HistGradientBoosting quantile (q10/q50/q90) on log(price/MRP), monotone constraints",
+  "test_overall": {
+    "MAE_inr": 333.99,
+    "MAPE_pct": 8.71,
+    "RMSE_inr": 883.63,
+    "R2": 0.986
   },
-  "test": {
-    "MAE": 991.68,
-    "RMSE": 3932.21,
-    "R2": 0.623
+  "test_sale_only": {
+    "MAE_inr": 405.38,
+    "MAPE_pct": 8.54
   },
-  "n_train": 196,
-  "n_val": 42,
-  "n_test": 42,
-  "trainedOn": "seed_listings.csv synthetic campus data \u2014 not live user trades",
-  "model": "RandomForestRegressor"
+  "naive_baseline_test": {
+    "MAE_inr": 818.61,
+    "MAPE_pct": 43.92,
+    "RMSE_inr": 1874.9,
+    "R2": 0.9371
+  },
+  "model_comparison_test": {
+    "LinearRegression": {
+      "MAE_inr": 513.44,
+      "MAPE_pct": 17.21,
+      "RMSE_inr": 1282.99,
+      "R2": 0.9705
+    },
+    "RandomForestRegressor": {
+      "MAE_inr": 333.25,
+      "MAPE_pct": 8.97,
+      "RMSE_inr": 879.48,
+      "R2": 0.9862
+    },
+    "HistGradientBoosting_q50 (served)": {
+      "MAE_inr": 333.99,
+      "MAPE_pct": 8.71,
+      "RMSE_inr": 883.63,
+      "R2": 0.986
+    }
+  },
+  "why_gradient_boosting": "about as accurate as RandomForest here, but also supports monotonic constraints (older never pricier) and quantile loss, which gives the fair-price band directly",
+  "interval_80pct_coverage": 0.79,
+  "cqr_log_offset": 0.0216,
+  "n_train": 4800,
+  "n_test": 1200,
+  "n_real_rows": 0,
+  "trainedOn": "synthetic campus depreciation data (no real sales yet \u2014 retrain after trades accumulate)",
+  "features": [
+    "log_original",
+    "age_months",
+    "condition",
+    "demand",
+    "brand_tier",
+    "is_lend",
+    "log_lend_days",
+    "cat_books",
+    "cat_cycles",
+    "cat_electronics",
+    "cat_lab",
+    "cat_furniture",
+    "cat_hostel",
+    "cat_notes",
+    "cat_other",
+    "item_calculator",
+    "item_phone",
+    "item_laptop",
+    "item_tablet",
+    "item_audio",
+    "item_cycle",
+    "item_textbook",
+    "item_notes",
+    "item_appliance",
+    "item_bedding",
+    "item_furniture",
+    "item_lab_gear",
+    "item_generic"
+  ]
 }

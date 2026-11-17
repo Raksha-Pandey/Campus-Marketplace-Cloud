@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
+import VerifyListing from '../components/VerifyListing'
 import { ShieldCheck, ArrowLeft, PartyPopper } from 'lucide-react'
 import ImageUploader from '../components/ImageUploader'
 import CategoryDropdown from '../components/CategoryDropdown'
 import PriceInsight from '../components/PriceInsight'
 import WashiTape from '../components/WashiTape'
-import { categories } from '../data/mockData'
+import { useCategories } from '../hooks/useCategories'
 import { api } from '../api'
 import { campusFairPrice, rupee, sanitizePredictedPrice } from '../utils/fairPrice'
+import { getBrowserPosition } from '../utils/geo'
 
 const conditions = ['New', 'Like New', 'Good', 'Fair']
 
@@ -16,6 +18,7 @@ const fieldClass = (bad) =>
   }`
 
 export default function SellLend({ onPublish }) {
+  const [result, setResult] = useState(null)
   const [step, setStep] = useState('form')
   const [images, setImages] = useState([])
   const [title, setTitle] = useState('')
@@ -31,6 +34,7 @@ export default function SellLend({ onPublish }) {
   const [dueDays, setDueDays] = useState('7')
   const [shareLocation, setShareLocation] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
   const [missing, setMissing] = useState([])
   const [insight, setInsight] = useState(null)
@@ -38,6 +42,7 @@ export default function SellLend({ onPublish }) {
   const [priceTouched, setPriceTouched] = useState(false)
   const formTopRef = useRef(null)
 
+  const categories = useCategories()
   const catObj = categories.find((c) => c.id === category)
   const estimatePayload = {
     category,
@@ -99,7 +104,7 @@ export default function SellLend({ onPublish }) {
         lendUnit,
       })
         .then((res) => {
-          const next = sanitizePredictedPrice(res, local)
+          const next = { ...sanitizePredictedPrice(res, local), comparables: res.comparables || null }
           setInsight(next)
           setInsightErr('')
           if (!priceTouched && next.recommendedPrice > 0) {
@@ -123,7 +128,16 @@ export default function SellLend({ onPublish }) {
     }
     setPublishing(true)
     setError('')
+    setNotice('')
     try {
+      let point = null
+      if (shareLocation) {
+        try {
+          point = await getBrowserPosition() // asked only now, only because the seller ticked the box
+        } catch (e) {
+          setNotice(`Listing published without location: ${e.message}. You can add it later from My listings.`)
+        }
+      }
       const created = await api.createListing({
         title,
         category,
@@ -138,8 +152,11 @@ export default function SellLend({ onPublish }) {
         defaultDueDays: Number(dueDays || 7),
         description,
         images: images.map((img) => img.url).filter(Boolean),
-        shareLocation,
+        shareLocation: Boolean(point),
+        ...(point || {}),
       })
+      if (created.locationNote) setNotice(created.locationNote)
+      setResult(created)
       setStep('success')
       onPublish?.(created)
     } catch (err) {
@@ -153,7 +170,7 @@ export default function SellLend({ onPublish }) {
     setStep('form'); setImages([]); setTitle(''); setDescription('')
     setCategory(''); setCondition(''); setListingType('sell'); setPrice('')
     setBrand(''); setAgeMonths(''); setOriginalPrice(''); setError(''); setInsight(null)
-    setMissing([]); setPriceTouched(false)
+    setMissing([]); setPriceTouched(false); setShareLocation(false)
   }
 
   if (step === 'success') {
@@ -162,8 +179,27 @@ export default function SellLend({ onPublish }) {
         <div className="w-20 h-20 rounded-full bg-moss-bg border-[1.5px] border-moss-ink/40 flex items-center justify-center mx-auto mb-5">
           <PartyPopper size={32} className="text-moss-ink" />
         </div>
-        <h2 className="font-display font-bold text-xl mb-2">Listing submitted</h2>
-        <p className="text-sm text-ink-soft mb-6">Saved to MongoDB. High-risk listings are held for admin review instead of going live automatically.</p>
+        <h2 className="font-display font-bold text-xl mb-2">
+          {result?.status === 'verification' ? 'Almost there' : result?.status === 'held' ? 'Listing submitted for review' : 'Listing published'}
+        </h2>
+        <p className="text-sm text-ink-soft mb-3">
+          {result?.status === 'held'
+            ? 'Our fraud screening flagged a few unusual signals, so an admin will check this listing before it goes live. You will get a notification.'
+            : result?.status === 'verification'
+              ? 'One extra step before buyers can see it.'
+              : 'Buyers on campus can see it now.'}
+        </p>
+        {result?.status === 'verification' && (
+          <div className="mb-4">
+            <VerifyListing listingId={result.id} devOtp={result.devOtp} onVerified={(l) => setResult(l)} />
+          </div>
+        )}
+        {result?.fraudRiskLevel && (
+          <p className="text-[11px] font-mono text-ink-soft mb-3">
+            AI fraud screening: {result.fraudRiskLevel} risk ({result.fraudRiskScore}) · AI fair price ₹{result.fairMin}–₹{result.fairMax}
+          </p>
+        )}
+        {notice && <p className="text-xs text-yellow-ink bg-yellow-bg border border-yellow-ink/30 rounded-md p-2 mb-4">{notice}</p>}
         <button onClick={reset} className="bg-ink text-paper rounded-full px-5 py-2.5 text-sm font-medium">List another item</button>
       </div>
     )
@@ -335,12 +371,19 @@ export default function SellLend({ onPublish }) {
             confidence={insight?.confidence}
             explanation={insight?.explanation}
             usedTypicalMrp={insight?.usedTypicalMrp}
+            source={insight?.source}
+            comparables={insight?.comparables}
           />
         )}
 
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={shareLocation} onChange={(e) => setShareLocation(e.target.checked)} />
-          Include this listing in nearby discovery (only if you enabled location in Profile)
+        <label className="flex items-start gap-2 text-sm bg-white border border-ink/20 rounded-md p-3">
+          <input type="checkbox" className="mt-0.5" checked={shareLocation} onChange={(e) => setShareLocation(e.target.checked)} />
+          <span>
+            Show this item in “nearby” searches
+            <span className="block text-[11px] text-ink-soft mt-0.5">
+              Optional. Your browser will ask for permission when you publish. Buyers only see “~1.2 km away”, never a map pin or exact coordinates, and the stored point is blurred by 80–220 m. You can switch it off anytime in My listings.
+            </span>
+          </span>
         </label>
 
         <div className="flex items-center gap-2 text-xs text-moss-ink bg-moss-bg border border-moss-ink/30 rounded-md px-3 py-2.5">

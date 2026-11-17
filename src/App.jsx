@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Routes, Route, useLocation, Navigate } from 'react-router-dom'
+import { Routes, Route, useLocation, Navigate, Link } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import Sidebar from './components/Sidebar'
 import Modal from './components/Modal'
@@ -39,6 +39,8 @@ export default function App() {
   const [myListings, setMyListings] = useState([])
   const [apiReady, setApiReady] = useState(null)
   const [payOrder, setPayOrder] = useState(null)
+  const [payResult, setPayResult] = useState(null) // { ok, message }
+  const [paying, setPaying] = useState(false)
 
   useEffect(() => {
     api.health().then(() => setApiReady(true)).catch(() => setApiReady(false))
@@ -95,7 +97,7 @@ export default function App() {
     try {
       const order = await api.createOrder({ listingId: product.id })
       setPayOrder(order)
-      showToast('Payment order created — complete checkout to finish')
+      setPayResult(null)
     } catch (err) {
       showToast(err.message)
     }
@@ -104,7 +106,33 @@ export default function App() {
 
   const handlePublish = (listing) => {
     setMyListings((l) => [hydrateListing(listing), ...l])
-    showToast(listing.status === 'held' ? 'Listing held for admin review' : 'Listing saved to MongoDB ✓')
+    showToast(
+      listing.status === 'held'
+        ? 'Listing held for admin review'
+        : listing.status === 'verification'
+          ? 'One more step: confirm the listing with the code we emailed you'
+          : 'Listing published ✓'
+    )
+  }
+
+  const closePay = () => { setPayOrder(null); setPayResult(null); setPaying(false) }
+
+  const confirmOnServer = async (payload) => {
+    setPaying(true)
+    try {
+      await api.verifyPayment(payload)
+      setPayResult({ ok: true, message: 'Payment verified by the server. The seller has been notified — chat with them to arrange the hand-over.' })
+    } catch (err) {
+      setPayResult({ ok: false, message: err.payload?.refunded ? err.message : (err.message || 'Payment verification failed') })
+    } finally {
+      setPaying(false)
+    }
+  }
+
+  const cancelOrder = async (order, status, message) => {
+    try { await api.verifyPayment({ orderId: order.orderId, status }) } catch { /* ignore */ }
+    showToast(message)
+    closePay()
   }
 
   const startRazorpay = async (order) => {
@@ -116,41 +144,17 @@ export default function App() {
         currency: order.currency || 'INR',
         order_id: order.orderId,
         name: 'Campus Marketplace',
-        description: 'Verified campus listing payment',
-        handler: async (response) => {
-          try {
-            await api.verifyPayment({
-              orderId: response.razorpay_order_id,
-              paymentId: response.razorpay_payment_id,
-              signature: response.razorpay_signature,
-            })
-            showToast('Payment verified by the server ✓')
-          } catch (err) {
-            showToast(err.message || 'Payment verification failed')
-          }
-          setPayOrder(null)
-        },
-        modal: {
-          ondismiss: async () => {
-            try {
-              await api.verifyPayment({ orderId: order.orderId, status: 'cancelled' })
-            } catch {
-              /* ignore */
-            }
-            showToast('Payment cancelled')
-            setPayOrder(null)
-          },
-        },
+        description: order.itemTitle || 'Campus listing payment',
+        prefill: order.prefill || {},
+        theme: { color: '#1f1b16' },
+        handler: (response) => confirmOnServer({
+          orderId: response.razorpay_order_id,
+          paymentId: response.razorpay_payment_id,
+          signature: response.razorpay_signature,
+        }),
+        modal: { ondismiss: () => { if (!paying) cancelOrder(order, 'cancelled', 'Payment cancelled — item released') } },
       })
-      checkout.on('payment.failed', async (resp) => {
-        try {
-          await api.verifyPayment({ orderId: order.orderId, status: 'failed' })
-        } catch {
-          /* ignore */
-        }
-        showToast(resp?.error?.description || 'Payment failed')
-        setPayOrder(null)
-      })
+      checkout.on('payment.failed', (resp) => cancelOrder(order, 'failed', resp?.error?.description || 'Payment failed'))
       checkout.open()
     } catch (err) {
       showToast(err.message || 'Could not open Razorpay checkout')
@@ -161,17 +165,12 @@ export default function App() {
     try {
       const signed = await api.devCompletePayment({ orderId: payOrder.orderId, outcome })
       if (outcome !== 'success') {
-        await api.verifyPayment({ ...signed, status: outcome === 'cancel' ? 'cancelled' : 'failed' }).catch(() => {})
-        showToast(outcome === 'cancel' ? 'Payment cancelled' : 'Payment failed')
-        setPayOrder(null)
-        return
+        return cancelOrder(payOrder, outcome === 'cancel' ? 'cancelled' : 'failed', outcome === 'cancel' ? 'Payment cancelled — item released' : 'Payment failed — item released')
       }
-      await api.verifyPayment(signed)
-      showToast('Payment verified by the server ✓')
+      await confirmOnServer(signed)
     } catch (err) {
-      showToast(err.message || 'Payment verification failed')
+      setPayResult({ ok: false, message: err.message || 'Payment verification failed' })
     }
-    setPayOrder(null)
   }
 
   if (!loading && !user && location.pathname !== '/auth' && location.pathname !== '/auth/callback') {
@@ -211,33 +210,51 @@ export default function App() {
             item={activeProduct}
             actionLabel={activeProduct.type === 'lend' ? 'Request to borrow' : 'Pay & buy'}
             onRequestAction={handleProductAction}
+            watching={favorites.includes(activeProduct.id)}
+            onToggleWatch={toggleFavorite}
+            isOwner={String(activeProduct.seller?.userId) === String(user?.id || user?._id)}
           />
         )}
       </Modal>
 
-      <Modal open={!!payOrder} onClose={() => setPayOrder(null)}>
+      <Modal open={!!payOrder} onClose={payResult ? closePay : () => payOrder && cancelOrder(payOrder, 'cancelled', 'Checkout closed — item released')}>
         {payOrder && (
           <div className="p-5">
-            <h2 className="font-display font-bold text-lg mb-2">Checkout</h2>
-            <p className="text-sm text-ink-soft mb-3">Amount: ₹{payOrder.amount} · Order {payOrder.orderId}</p>
-            {payOrder.provider === 'dev' ? (
-              <>
-                <p className="text-xs text-yellow-ink bg-yellow-bg border border-yellow-ink/30 rounded-md p-2 mb-4">
-                  Development payment mode — no money is collected. This is not a successful Razorpay payment. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to enable real test checkout. The backend still verifies a signed payload.
-                </p>
-                <div className="flex gap-2">
-                  <button onClick={() => completeDevPay('success')} className="flex-1 bg-ink text-paper rounded-full py-2 text-sm">Simulate signed success</button>
-                  <button onClick={() => completeDevPay('failed')} className="flex-1 border-[1.5px] border-ink rounded-full py-2 text-sm">Fail</button>
-                  <button onClick={() => completeDevPay('cancel')} className="flex-1 border-[1.5px] border-ink rounded-full py-2 text-sm">Cancel</button>
-                </div>
-              </>
-            ) : (
+            <h2 className="font-display font-bold text-lg mb-1">{payResult ? (payResult.ok ? 'Payment successful' : 'Payment not completed') : 'Checkout'}</h2>
+            <p className="text-sm font-medium">{payOrder.itemTitle}</p>
+            <p className="text-sm text-ink-soft mb-3">
+              <span className="font-mono font-semibold text-coral-ink">₹{payOrder.amount}</span> · Order {payOrder.orderId}
+            </p>
+            {payResult ? (
               <div>
-                <p className="text-sm text-ink-soft mb-3">Razorpay test checkout. The backend verifies the payment signature before marking the sale paid.</p>
-                <button onClick={() => startRazorpay(payOrder)} className="w-full bg-ink text-paper rounded-full py-2 text-sm">
-                  Pay with Razorpay
-                </button>
+                <p className={`text-sm rounded-md p-3 border ${payResult.ok ? 'bg-moss-bg text-moss-ink border-moss-ink/30' : 'bg-coral-bg text-coral-ink border-coral-ink/30'}`}>{payResult.message}</p>
+                <div className="flex gap-2 mt-4">
+                  <button onClick={closePay} className="flex-1 border-[1.5px] border-ink rounded-full py-2 text-sm">Close</button>
+                  <Link to="/transactions" onClick={closePay} className="flex-1 text-center bg-ink text-paper rounded-full py-2 text-sm">View payments</Link>
+                </div>
               </div>
+            ) : (
+              <>
+                <p className="text-[11px] text-ink-soft mb-3">
+                  This item is reserved for you for a few minutes while you pay. If you close checkout it goes back on sale.
+                </p>
+                {payOrder.provider === 'dev' ? (
+                  <>
+                    <p className="text-xs text-yellow-ink bg-yellow-bg border border-yellow-ink/30 rounded-md p-2 mb-4">
+                      Development payment mode — no money is collected. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET on the server to enable real Razorpay checkout (UPI, cards, netbanking). The backend still verifies a signed payload.
+                    </p>
+                    <div className="flex gap-2">
+                      <button disabled={paying} onClick={() => completeDevPay('success')} className="flex-1 bg-ink text-paper rounded-full py-2 text-sm disabled:opacity-50">{paying ? 'Verifying…' : 'Simulate signed success'}</button>
+                      <button disabled={paying} onClick={() => completeDevPay('failed')} className="flex-1 border-[1.5px] border-ink rounded-full py-2 text-sm">Fail</button>
+                      <button disabled={paying} onClick={() => completeDevPay('cancel')} className="flex-1 border-[1.5px] border-ink rounded-full py-2 text-sm">Cancel</button>
+                    </div>
+                  </>
+                ) : (
+                  <button disabled={paying} onClick={() => startRazorpay(payOrder)} className="w-full bg-ink text-paper rounded-full py-2.5 text-sm disabled:opacity-50">
+                    {paying ? 'Verifying payment…' : `Pay ₹${payOrder.amount} with Razorpay (UPI / card)`}
+                  </button>
+                )}
+              </>
             )}
           </div>
         )}

@@ -1,6 +1,8 @@
 const ML_URL = () => process.env.ML_SERVICE_URL || 'http://127.0.0.1:8000'
 
-async function postJson(path, body, timeoutMs = 4000) {
+const DEFAULT_TIMEOUT_MS = Number(process.env.ML_TIMEOUT_MS || 8000)
+
+async function postJson(path, body, timeoutMs = DEFAULT_TIMEOUT_MS) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
@@ -24,6 +26,18 @@ async function postJson(path, body, timeoutMs = 4000) {
 
 export async function predictPrice(payload) {
   return postJson('/ai/price-predict', payload)
+}
+
+export async function fraudModelInfo() {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS)
+  try {
+    const res = await fetch(`${ML_URL()}/ai/fraud-model-info`, { signal: controller.signal })
+    if (!res.ok) throw new Error(`ML service error (${res.status})`)
+    return await res.json()
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 export async function scoreFraud(payload) {
