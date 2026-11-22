@@ -13,7 +13,7 @@ export async function connectDB() {
 
   try {
     await mongoose.connect(uri, { serverSelectionTimeoutMS: 2500 })
-    console.log(`MongoDB connected: ${uri}`)
+    console.log('MongoDB connected successfully')
     return { mode: 'local', uri }
   } catch (err) {
     if (process.env.USE_MEMORY_DB === 'false') {
