@@ -299,3 +299,29 @@ ML after training: `curl -s http://127.0.0.1:8000/health`
 - **MongoDB Atlas**: optional; local or in-memory works.
 - **ML**: trained on synthetic data until real sales exist (see above).
 - No map API key is required (browser Geolocation + geohash only).
+
+## Cloud Deployment
+
+The deployed application uses:
+
+- **AWS EC2:** Hosts the React frontend and Express backend.
+- **Nginx:** Serves the frontend and proxies backend API requests.
+- **MongoDB Atlas:** Cloud database.
+- **AWS S3:** Stores listing images.
+- **Render:** Hosts the FastAPI price recommendation and fraud detection service.
+
+Application: http://3.27.108.165
+
+ML service: https://campus-marketplace-cloud.onrender.com
+
+### Local Setup
+
+Clone the cloud integration branch:
+
+```bash
+git clone -b cloud-integration https://github.com/Raksha-Pandey/Campus-Marketplace-Cloud.git
+cd Campus-Marketplace-Cloud
+npm install
+npm install --prefix server
+cp server/.env.example server/.env
+```
