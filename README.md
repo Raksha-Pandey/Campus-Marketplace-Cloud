@@ -1,327 +1,488 @@
 # Campus Marketplace
+### Multi-Cloud Deployment and Architecture of a Secure and Scalable Peer-to-Peer Academic Platform
 
-Campus-exclusive buy / borrow / sell / lend app for **verified college emails**. React UI talks to a real Express + MongoDB API. Price and fraud models run in a separate Python FastAPI service trained on **seed data** (not live student trades).
+<p align="center">
+  A campus-exclusive marketplace that enables verified students to buy, sell, lend and borrow academic and hostel essentials through a decoupled multi-cloud architecture.
+</p>
 
-## Architecture
+<p align="center">
+  <img src="https://img.shields.io/badge/Cloud-AWS-orange?logo=amazonaws" />
+  <img src="https://img.shields.io/badge/Database-MongoDB%20Atlas-green?logo=mongodb" />
+  <img src="https://img.shields.io/badge/ML-FastAPI-009688?logo=fastapi" />
+  <img src="https://img.shields.io/badge/Deployment-Render-purple?logo=render" />
+  <img src="https://img.shields.io/badge/Frontend-React-61DAFB?logo=react" />
+  <img src="https://img.shields.io/badge/Backend-Node.js-339933?logo=nodedotjs" />
+</p>
 
+---
+
+## 1. Project Overview
+
+Campus Marketplace is a campus-exclusive peer-to-peer web platform designed to simplify the buying, selling, lending and borrowing of academic and hostel-related items among verified students.
+
+Traditional campus transactions often take place through WhatsApp groups, Telegram channels and notice boards. These platforms lack institutional verification, structured listings, reliable image storage and mechanisms for identifying potentially fraudulent listings.
+
+Campus Marketplace addresses these challenges through a centralized marketplace supported by cloud infrastructure and machine-learning-based assessment.
+
+The primary focus of this project is the design, implementation and verification of a **decoupled multi-cloud deployment architecture**, using Amazon Web Services (AWS), MongoDB Atlas and Render.
+
+Each application component is deployed independently according to its workload and infrastructure requirements.
+
+## 2. Key Features
+
+- **Campus-Based Authentication:** Access restricted to approved institutional email domains and Google sign-in.
+- **Peer-to-Peer Marketplace:** Supports buying, selling, lending and borrowing academic and hostel essentials.
+- **Machine Learning-Based Price Estimation:** Estimates fair listing prices using a gradient-boosting regression model.
+- **Fraud Risk Detection:** Identifies potentially suspicious listings using Isolation Forest anomaly detection.
+- **Explainable Fraud Scoring:** Provides risk factors to help administrators understand flagged listings.
+- **Cloud-Based Image Storage:** Stores validated listing photographs in Amazon S3.
+- **Managed Database:** Maintains users, listings, transactions, messages and audit records in MongoDB Atlas.
+- **Secure AWS Access:** Uses IAM roles and IMDSv2 for temporary AWS credentials without storing permanent access keys.
+- **Audit Logging:** Records security-sensitive administrative activities.
+- **Resilient ML Integration:** Uses heuristic pricing when the independent ML service is unavailable.
+- **Location Privacy:** Encrypts exact coordinates and exposes approximate geohash-based locations.
+
+## 3. System Architecture
+
+Campus Marketplace follows a decoupled multi-cloud architecture in which the frontend, transactional backend, database, object storage and machine-learning service operate as separate components.
+
+### High-Level Architecture Diagram
+
+```mermaid
+flowchart TD
+    U["Student / User Browser"]
+    N["Nginx Reverse Proxy"]
+    R["React SPA"]
+    E["Node.js + Express REST API"]
+
+    S3[("Amazon S3<br/>Listing Images")]
+    IAM["AWS IAM Role + IMDSv2"]
+    DB[("MongoDB Atlas<br/>Application Database")]
+    ML["Render<br/>FastAPI ML Microservice"]
+
+    U --> N
+    N --> R
+    N --> E
+
+    E -->|"Image Upload / Retrieval"| S3
+    E -->|"Database Operations"| DB
+    E -->|"Async HTTPS Requests"| ML
+    IAM -->|"Temporary Credentials"| E
+
+    ML -.->|"Heuristic Pricing Fallback<br/>when ML is unavailable"| E
 ```
-React (Vite)  →  Express API (:5001)  →  MongoDB
-                         ↓
-              Python FastAPI ML (:8000)
-              GradientBoosting price model + IsolationForest fraud model
+
+### Architecture Components
+
+| Component | Technology | Responsibility |
+|---|---|---|
+| Frontend | React | User interface and marketplace interaction |
+| Web Server | Nginx | Reverse proxy and frontend delivery |
+| Backend | Node.js, Express.js | REST API and transactional operations |
+| Compute | Amazon EC2 | Hosts the frontend and backend |
+| Object Storage | Amazon S3 | Stores listing photographs |
+| Identity Management | AWS IAM, IMDSv2 | Secure temporary AWS credentials |
+| Database | MongoDB Atlas | Persistent application data |
+| ML Service | Python, FastAPI | Price estimation and fraud scoring |
+| ML Hosting | Render | Independent ML service deployment |
+
+## 4. Technology Stack
+
+| Category | Technologies |
+|---|---|
+| Frontend | React 19, JavaScript |
+| Backend | Node.js 20 LTS, Express.js 4 |
+| Database | MongoDB Atlas |
+| Cloud Provider | Amazon Web Services |
+| Compute | AWS EC2 |
+| Object Storage | Amazon S3 |
+| Access Management | AWS IAM, IMDSv2 |
+| Reverse Proxy | Nginx 1.24+ |
+| Machine Learning | Python 3.11, Scikit-learn |
+| ML Framework | FastAPI, Uvicorn |
+| ML Deployment | Render |
+| Operating System | Ubuntu 24.04 LTS |
+| Version Control | Git, GitHub |
+
+## 5. Cloud Infrastructure and Services
+
+The application uses three independent cloud providers, with each service handling a specific responsibility.
+
+### 5.1 Amazon EC2 – Infrastructure as a Service (IaaS)
+
+Amazon EC2 hosts the main web application and transactional backend.
+
+**Configuration:**
+- Cloud Provider: Amazon Web Services
+- Region: Asia Pacific (Sydney)
+- Region Code: `ap-southeast-2`
+- Operating System: Ubuntu 24.04 LTS
+- Runtime: Node.js 20 LTS
+- Web Server: Nginx 1.24 or later
+
+**Responsibilities:**
+- Hosts the React production build.
+- Runs the Express.js REST API.
+- Handles authentication and application requests.
+- Coordinates communication with MongoDB Atlas, Amazon S3 and Render.
+
+### 5.2 Amazon S3 – Object Storage
+
+Amazon S3 is used to store listing photographs separately from the application database.
+
+**Configuration:**
+- Bucket Name: `campus-marketplace-cloud-762049038007`
+- Region: `ap-southeast-2`
+
+**Implementation:**
+- Validates uploaded files using file magic bytes.
+- Supports JPEG, PNG and WebP images.
+- Stores images as S3 objects.
+- Saves image references instead of binary image data in MongoDB.
+- Supports direct S3 URLs and an optional Express streaming route.
+
+This reduces database document sizes and separates media storage from transactional data.
+
+### 5.3 AWS IAM and IMDSv2 – Identity and Access Management
+
+The EC2 instance accesses Amazon S3 through an attached IAM role.
+
+- An IAM role is attached to the EC2 instance using an instance profile.
+- IMDSv2 provides temporary credentials.
+- AWS SDK uses these credentials to communicate with S3.
+- No permanent AWS access keys are stored on the server.
+
+This approach improves credential security and reduces the risk of exposing long-lived cloud credentials.
+
+### 5.4 MongoDB Atlas – Database as a Service (DBaaS)
+
+MongoDB Atlas provides managed document database storage.
+
+**Data maintained includes:**
+- User accounts
+- Marketplace listings
+- Transactions
+- Messages
+- Audit logs
+
+**Integration and Security:**
+- TLS-encrypted database connection.
+- Controlled network access through an IP access list.
+- Database credentials supplied through environment variables.
+- Managed database infrastructure independent of the EC2 instance.
+
+An in-memory database fallback is available for local development when Atlas is unreachable. It is not a persistent production replacement.
+
+### 5.5 Render – Platform as a Service (PaaS)
+
+Render hosts an independent Python-based FastAPI microservice responsible for machine-learning inference.
+
+**Deployment URL:**
+
+https://campus-marketplace-cloud.onrender.com
+
+**Responsibilities:**
+- ML-based price estimation.
+- Fraud-risk scoring.
+- Combined listing assessment.
+
+Separating ML inference from the Express backend prevents CPU-intensive model operations from directly affecting the transactional API.
+
+## 6. Machine Learning Implementation
+
+The project integrates two machine-learning models through an independent FastAPI service.
+
+### 6.1 Price Estimation Model
+
+- Algorithm: HistGradientBoosting Quantile Regression.
+- Predicts fair-price estimates using item-related features.
+- Uses q10, q50 and q90 quantile predictions.
+- Models the log(price/MRP) relationship.
+
+### 6.2 Fraud Detection Model
+
+- Algorithm: Isolation Forest.
+- Uses 400 trees.
+- Uses 512 samples per tree.
+- Evaluates 22 behavioural, text and user-related features.
+- Identifies potentially anomalous listing behaviour.
+
+The fraud-scoring service also provides explanatory factors for medium- and high-risk listings to assist administrator moderation.
+
+### 6.3 ML Service Integration
+
+The Express API communicates with the Render service through asynchronous HTTPS requests.
+
+The integration supports:
+- Price prediction.
+- Fraud-risk assessment.
+- Combined listing assessment.
+- Automatic model initialization when model files are missing or incompatible.
+- Heuristic pricing fallback when the ML service is cold, slow or unavailable.
+
+## 7. Application and Cloud Integration Workflow
+
+The following workflow describes how a listing with an image moves through the deployed cloud infrastructure.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant N as Nginx
+    participant API as Express API on EC2
+    participant S3 as Amazon S3
+    participant ML as Render ML Service
+    participant DB as MongoDB Atlas
+
+    User->>N: Submit listing and photograph
+    N->>API: Forward API request
+    API->>API: Validate uploaded image
+    API->>S3: Upload validated photograph
+    S3-->>API: Return image reference
+    API->>ML: Request price and fraud assessment
+
+    alt ML service available
+        ML-->>API: Return price and fraud assessment
+    else ML unavailable
+        API->>API: Apply heuristic pricing fallback
+    end
+
+    API->>DB: Store listing and image reference
+    DB-->>API: Confirm database operation
+    API-->>User: Return listing response
 ```
 
-| Layer | Role |
-|--------|------|
-| `src/` | React UI (existing paper / washi-tape design) |
-| `server/` | Auth, listings, loans, payments, location, notifications |
-| `ml-service/` | Price recommendation + fraud anomaly scoring |
-| MongoDB | Persistence (local, Atlas, or in-memory fallback) |
+### Image Upload Pipeline
 
-## Folder structure
+1. The user submits a listing photograph.
+2. The Express API receives the image.
+3. The backend validates the file using magic bytes.
+4. The validated image is uploaded to Amazon S3.
+5. The image key or URL is stored in MongoDB Atlas.
+6. The image can subsequently be retrieved through the configured delivery mechanism.
 
-```
-src/                 frontend pages + components
-server/models/       User, Listing, Transaction, Message, Review, Payment, ...
-server/routes/       REST APIs under /api
-server/seed.js       demo/seed dataset (isSeed: true)
-ml-service/app/      FastAPI app
-ml-service/training/ model training
-ml-service/data/     seed_listings.csv
-```
+### Database Integration
 
-## Environment variables
+The Express backend connects to MongoDB Atlas using a TLS-encrypted connection string supplied through environment variables.
 
-Copy `server/.env.example` → `server/.env`.
+### ML Integration
+
+Price estimation and fraud scoring are handled independently by Render. If the service is unavailable, heuristic pricing allows listing publication to continue.
+
+## 8. Security Implementation
+
+Security mechanisms are implemented across the cloud infrastructure and application layers.
+
+| Security Mechanism | Implementation |
+|---|---|
+| Network Security | AWS Security Groups |
+| SSH Access | Restricted administrator access |
+| AWS Credentials | IAM Role and IMDSv2 |
+| Database Encryption | TLS connection to MongoDB Atlas |
+| ML Communication | HTTPS |
+| Image Validation | File magic-byte inspection |
+| Institutional Access | Approved email domains |
+| Location Privacy | AES-256-GCM encryption |
+| Audit Logging | Dedicated MongoDB collection |
+
+### Additional Security Measures
+
+- Express runs behind Nginx and is not directly exposed as a public listener.
+- Database access is restricted through the Atlas network access list.
+- Exact location coordinates are encrypted using AES-256-GCM.
+- The public API exposes only a five-character geohash for approximate location.
+- Security-sensitive administrative actions are recorded with user, action, resource and timestamp information.
+
+**Current Security Limitation:** Browser-to-EC2 communication uses HTTP on port 80. HTTPS for the public application is an important production requirement.
+
+## 9. Deployment Architecture and Configuration
+
+### Deployment Environment
+
+| Component | Deployment Details |
+|---|---|
+| EC2 Instance | AWS, `ap-southeast-2` |
+| Web Server | Nginx |
+| Backend Runtime | Node.js 20 LTS |
+| Database | MongoDB Atlas |
+| Image Storage | Amazon S3 |
+| ML Service | Render |
+| ML Runtime | Python 3.11 |
+| ML Framework | FastAPI, Scikit-learn, Uvicorn |
+
+### Environment Variables
+
+The application uses environment variables to manage configuration and sensitive information.
 
 | Variable | Purpose |
-|----------|---------|
-| `PORT` | API port (default 5001) |
-| `MONGODB_URI` | MongoDB connection string |
-| `USE_MEMORY_DB` | `auto` / `true` / `false` |
-| `JWT_SECRET` | JWT signing secret |
-| `JWT_EXPIRES_IN` | e.g. `7d` |
-| `OTP_PEPPER` | OTP hashing pepper |
-| `OTP_TTL_MS` | OTP lifetime |
-| `OTP_MAX_ATTEMPTS` | Max verify attempts |
-| `OTP_RESEND_COOLDOWN_MS` | Resend delay |
-| `DEV_RETURN_OTP` | `true` returns OTP in JSON for local tests |
-| `GOOGLE_CLIENT_ID` | Google OAuth Web client ID (Gmail Sign-In) |
-| `ALLOWED_COLLEGE_DOMAINS` | Comma-separated, e.g. `campus.edu,thapar.edu` |
-| `SMTP_HOST` `SMTP_PORT` `SMTP_USER` `SMTP_PASS` `SMTP_FROM` | Real OTP email |
-| `ML_SERVICE_URL` | FastAPI base URL |
-| `RAZORPAY_KEY_ID` `RAZORPAY_KEY_SECRET` | Live/test Razorpay |
-| `RAZORPAY_WEBHOOK_SECRET` | Verifies Razorpay webhooks (`/api/payments/webhook`) |
-| `PAYMENT_RESERVATION_MINUTES` | How long an item is held while a buyer checks out (default 15) |
-| `CLOUDINARY_URL` or `CLOUDINARY_CLOUD_NAME` `CLOUDINARY_API_KEY` `CLOUDINARY_API_SECRET` | Cloud image storage. Empty = local-disk dev storage |
-| `CLOUDINARY_FOLDER` `MAX_IMAGE_MB` `STORAGE_PROVIDER` `PUBLIC_API_URL` | Storage tuning |
-| `PAYMENT_MODE` | `dev` or omit when Razorpay keys exist |
-| `PAYMENT_DEV_SECRET` | HMAC secret for development checkout |
-| `CORS_ORIGINS` | Allowed browser origins |
-| `SEED_PASSWORD` `SEED_ADMIN_PASSWORD` | Seed account passwords |
-| `LOCATION_STALE_MS` | Drop stored location after this many ms |
-| `LOCATION_ENC_KEY` | 64 hex chars; AES-256-GCM key for stored user coordinates (derived from `JWT_SECRET` if empty) |
-| `MAX_ACCOUNTS_PER_DEVICE` | Sign-ups allowed from one browser/device before new ones are refused (default 3) |
-| `PRICE_DROP_EMAILS` | `true` also emails price-drop alerts (in-app alerts are always on) |
-
-Frontend optional: `VITE_API_URL` (default `/api`, proxied by Vite).
-
-## Database setup
-
-1. Install MongoDB locally **or** use Atlas in `MONGODB_URI`.
-2. If MongoDB is not running, the API starts **mongodb-memory-server** when `USE_MEMORY_DB=auto`.
-3. Empty databases auto-seed on first API start.
-
-## Seed / demo data
-
-```bash
-npm run seed
-```
-
-Creates ~30 verified `@campus.edu` students, ~75 listings (sale + lend), loans, reviews, watchlists, notifications, payments, and high-risk fraud examples. Documents have `isSeed: true`.
-
-Demo logins:
-
-- Student: `riya.sharma@campus.edu` / `CampusDemo123!`
-- Admin: `admin@campus.edu` / `CampusAdmin123!`
-
-## How to run
-
-### Frontend
-
-```bash
-npm install
-npm run dev
-```
-
-### Backend
-
-```bash
-npm install --prefix server
-npm run server
-```
-
-API health: http://localhost:5001/api/health
-
-### ML service
-
-```bash
-cd ml-service
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python training/generate_seed.py
-python training/train_price_model.py
-# or from project root: npm run ml:train
-uvicorn app.main:app --reload --port 8000
-```
-
-If FastAPI is down, listing creation still works and the UI shows **AI price recommendation temporarily unavailable.**
-
-## Payment gateway (Razorpay)
-
-Without Razorpay keys the app runs in **development payment mode** (clearly labelled, no money moves, but the server still verifies an HMAC-signed payload). With `RAZORPAY_KEY_ID` + `RAZORPAY_KEY_SECRET` (use `rzp_test_...` keys first) the UI opens real Razorpay Checkout (UPI / cards / netbanking).
-
-How it works:
-
-1. `POST /api/payments/create-order` — the **price is read from the listing in the database** (any amount sent by the browser is ignored). You cannot buy your own item. The listing is atomically **reserved** for the buyer (default 15 min) so two students cannot pay for the same item; abandoned checkouts are released automatically.
-2. Razorpay Checkout → browser calls `POST /api/payments/verify` → server checks the signature → item becomes `sold`, buyer and seller are notified.
-3. **Webhook** `POST /api/payments/webhook` (set it up in Razorpay Dashboard → Webhooks with `RAZORPAY_WEBHOOK_SECRET`; events `payment.captured`, `payment.failed`, `order.paid`) completes the payment even if the buyer closes the tab right after paying. Finalisation is idempotent.
-4. If a payment completes after the item was sold to someone else, it is refunded automatically. Admins can refund with `POST /api/payments/:id/refund`.
-5. `GET /api/payments` lists a user's payments (as buyer or seller); the *Loans & payments* page shows the history.
-
-Local webhook testing: use a tunnel (e.g. `ngrok http 5001`) and point the Razorpay webhook at `https://<tunnel>/api/payments/webhook`.
-
-## Cloud image storage (Cloudinary)
-
-1. Create a free Cloudinary account, copy the **API environment variable** (`CLOUDINARY_URL=cloudinary://KEY:SECRET@CLOUD`) into `server/.env`, restart the API.
-2. Photos are uploaded as soon as the seller picks them (`POST /api/uploads/images`, multipart). The server checks the real file type (magic bytes), enforces 5 MB / 6 photos, resizes to max 1600 px in Cloudinary, and returns URLs. Listings store **only URLs**, never base64.
-3. A listing can only reference photos uploaded by the same user. Editing/removing a listing deletes the files from the cloud; uploads never attached to a listing are cleaned up after 24 h.
-4. Without Cloudinary credentials the API falls back to `server/uploads/` (dev only — not durable on hosts with ephemeral disks). `GET /api/uploads/status` and the upload box say which one is active.
-5. Old listings that still contain base64 images: `npm run migrate-images`.
-
-## Optional location sharing (privacy-first)
-
-Two independent opt-ins, both off by default:
-
-- **Buyer**: Profile → *Enable nearby marketplace discovery* (browser permission). Lets *you* filter by distance. Stored for at most 7 days, deleted when you turn it off.
-- **Seller**: per listing, tick *Show this item in “nearby” searches* when publishing, or toggle it later in *My listings*. The stored point is blurred by 80–220 m; exact coordinates are never returned by any API. Buyers see only `~1.2 km away`.
-
-Nearby search (`GET /api/listings?nearby=true&radiusKm=3`) is computed in the API (bounding box + haversine), so it works on any MongoDB and combines with category / price / condition filters. Meeting points are still shared only after both sides agree.
-
-## Price recommendation model
-
-`ml-service/` trains and serves the model; the Express API calls it on every listing and in `POST /api/ai/price-predict`.
-
-- **Target**: `log(price / original MRP)` (scale-free), so a ₹900 calculator and a ₹40,000 laptop are learned on the same scale.
-- **Features**: MRP, age, condition, demand, category, item class from the title (phone, laptop, textbook, …), brand tier, sale vs lend and lend unit.
-- **Model**: three HistGradientBoosting quantile regressors (10 % / 50 % / 90 %) with **monotone constraints** (older never costs more, better condition never costs less). The median is the suggested price; the fair band is calibrated with conformalised quantile regression to ≈80 % coverage.
-- **Results** (held-out test set, `ml-service/models_store/price_metrics.json`): MAPE ≈ 8.7 % vs ≈ 44 % for a naive condition-average baseline; band coverage ≈ 79 %.
-- **Model comparison** (PDF section 5, same split): Linear Regression MAPE 17.2 % · Random Forest 9.0 % · Gradient Boosting (served) 8.7 %. RF and GBM are about equally accurate; GBM is served because it supports monotone constraints and quantile loss (the fair band). MAE, RMSE and R² are all in the metrics file.
-- The API passes the model's answer through unchanged. If the ML service is down, a formula fallback is used and labelled “formula estimate” in the UI. If ≥ 4 similar listings exist, live campus comparables (median / middle half) are shown next to the estimate.
-
-**Honest limitation:** the training data is *synthetic* (realistic depreciation curves + noise), because no real sales exist yet. The numbers above measure how well the model learns that behaviour, **not** real market accuracy. As students complete purchases, run:
-
-```bash
-npm run export-training   # real paid sales -> server/data/export-training.json
-npm run ml:train          # retrains, real rows weighted 5x
-```
-
-The ML service also retrains automatically at start-up if its model file is missing or from an incompatible scikit-learn.
-
-## Fraud / scam detection model (PDF sections 6-7)
-
-Code: `ml-service/app/services/fraud_features.py`, `fraud_model.py`, `training/generate_fraud_data.py`, `training/train_fraud_model.py`; Node side `server/utils/ai.js`.
-
-**22 features at three levels**, built by the API for every new listing (`extractFraudFeatures`):
-
-| Level | Features |
 |---|---|
-| Listing | price vs. **AI fair price** (from the pricing model), price vs. median of *comparable* campus listings, discount on expensive items, short title/description, duplicate title (same seller, or anyone in 24 h), copy-pasted description, no photos, **photos reused from another seller** (SHA-256 of the uploaded file), phone/UPI/“pay outside the app” text, urgency words |
-| User | account age, email verified, **linked accounts on the same device** (hashed `X-Device-Id`), confirmed reports, open reports, trust score |
-| Behavioural | listings in the last hour / 24 h, outgoing-message spike, transaction spike |
+| `PORT` | Internal Express API port (5001) |
+| `MONGODB_URI` | MongoDB Atlas connection string |
+| `USE_MEMORY_DB` | Development in-memory database fallback |
+| `S3_BUCKET_NAME` | Amazon S3 bucket name |
+| `AWS_REGION` | AWS deployment region |
+| `USE_S3_PROXY` | Selects image delivery mechanism |
+| `ML_SERVICE_URL` | Render ML service endpoint |
+| `ALLOWED_COLLEGE_DOMAINS` | Permitted institutional domains |
+| `JWT_SECRET` | Token signing secret |
+| `LOCATION_ENC_KEY` | Location encryption key |
 
-**Model.** Isolation Forest (400 trees, unsupervised — no fraud labels exist on day one, as the PDF says). Every feature is *risk-oriented and one-sided-clipped*, so an unusually **good** account (4 years old, long description) can never look anomalous. The raw anomaly score is calibrated to a 0-1 **Fraud Risk Score** with percentile anchors from the training data.
+**Security Note:** Actual credentials and secret values are intentionally excluded from the repository. Never commit `.env` files, database credentials, AWS access keys or encryption secrets to GitHub.
 
-**Decision engine.** `LOW < 0.40` → publish · `0.40-0.70 MEDIUM` → **extra verification**: listing is hidden until the seller enters a 6-digit code emailed to their college address · `≥ 0.70 HIGH` → **hold + admin review**. Price deviation is only one of 22 inputs: a 30 % cheaper iPhone from a trusted seller stays LOW (tested). Each score comes with **explanations** (occlusion: “how much does the risk drop if this one feature looked normal?”), shown to admins and sellers. If the ML service is down, a rule-based fallback with the same thresholds is used and labelled `heuristic`.
+## 10. Testing and Performance Evaluation
 
-**Results** on 3 600 held-out synthetic rows with injected scams (`models_store/fraud_metrics.json`): ROC-AUC ≈ 0.998 · MEDIUM+HIGH recall ≈ 98 % at precision ≈ 72 % · HIGH precision 100 % · false alarms on honest students ≈ 2 % (vs 7.7 % for “any red flag” rules). Per-pattern detection (price bait, spam duplicates, multi-account, repeat offender, stolen photos, activity spike) is in the admin console → *AI models*.
+The deployment was verified through automated tests, ML validation tests and external endpoint checks.
 
-**Honest limitation:** like the price model, it is trained on *simulated* campus behaviour; the numbers show it separates the simulated scam patterns, not real-world accuracy.
+### Testing Summary
 
-**Learning from admins (stage 2).** Every listing stores the feature snapshot it was scored with. Admin decisions become labels:
-
-```bash
-npm run export-fraud   # rejected / confirmed-report = 1, approved / sold cleanly = 0 -> server/data/fraud-training.json
-npm run ml:train       # with >= 10 of each label a RandomForestClassifier is trained and blended 50/50
-```
-
-## Reports, admin console, trust score
-
-- **Reports**: students report a listing, a user, or a **chat message** (only the recipient can). 3 open reports hide a listing automatically. Admin *confirms* (accused trust drops, can remove the listing) or *dismisses* (listing restored).
-- **Admin console** (`/admin`): fraud alerts with risk meter + reasons, reports, users (search, **suspend/unsuspend** — suspended users are logged out and their listings hidden), analytics (users, listings by status/category/risk, overdue loans, payments), **settings** (banned words for listings + chat, enable/disable/add categories), AI model metrics, audit log.
-- **Trust score** follows the PDF formula `T = 10 + 20·V + 25·R + 20·C + 15·O + 10·A − 40·F` (0-100). Confirmed reports weigh 1.0, admin-upheld flags 0.5, open complaints only 0.15. The profile shows each component; every change is written to the **audit trail** with a reason.
-- **Price-drop alerts**: watchers get an in-app notification when the price falls below the last price they saw; optional thresholds (any / ≥ x % / ≥ ₹x) set from the listing page.
-- **Avatar builder**: face, skin, hair, hair colour, outfit, colour, accessory, background — stored as a small JSON object, drawn as SVG.
-- **Privacy**: exact user coordinates are AES-256-GCM encrypted at rest; only geohash-rounded positions are used for discovery.
-
-## PDF feature coverage
-
-| PDF section | Where |
+| Test Category | Tests / Verification |
 |---|---|
-| 3 College email verification, duplicate-account detection, rate limiting | `routes/auth.js`, `utils/device.js`, `middleware/rateLimit.js` |
-| 3.1 Avatar identity | `components/AvatarBuilder.jsx`, `PUT /api/users/me` |
-| 4 Optional location (opt-in, geohash, blur, encrypted, expiry) | `routes/location.js`, `utils/geohash.js`, `utils/locationCrypto.js` |
-| 5 AI price range + confidence + reason; LR/RF/GBM comparison | `ml-service/training/train_price_model.py` |
-| 6 Fraud model (Isolation Forest → RF on admin labels) | `ml-service/training/train_fraud_model.py` |
-| 7 Combined decision engine (LOW/MEDIUM/HIGH) | `server/utils/ai.js`, `POST /ai/assess-listing` (ML service) |
-| 8 Borrow/lend due dates, reminders, extensions, lender-confirmed return | `routes/transactions.js`, `utils/loans.js` |
-| 9 Price-drop alerts with thresholds | `utils/priceAlerts.js`, `routes/watchlist.js` |
-| 10 Trust score formula + bands | `utils/trust.js` |
-| 13 Key APIs | see API overview |
-| 14 Security: RBAC, admin-only routes, signed uploads, chat abuse reports, audit trail | `middleware/auth.js`, `routes/reports.js`, `models/AuditLog.js` |
+| API Integration Tests | 50 automated tests |
+| ML Validation Tests | 17 tests |
+| EC2 Health Verification | Successful |
+| MongoDB Atlas Connectivity | Connected |
+| Amazon S3 Connectivity | Verified |
+| Render Health Verification | Successful |
+| Authentication Verification | Verified |
 
-## College email + Google Sign-In
+### Cloud Storage Evaluation
 
-**Continue with Google** sends you to Google’s account picker (`GET /api/auth/google/start` → Google → `/api/auth/google/callback`). The backend exchanges the auth code, checks `email_verified`, then creates a verified session.
+Moving listing photographs from Base64 database storage to Amazon S3 significantly reduced document size.
 
-Required in `server/.env`:
+| Parameter | Before Migration | After Migration |
+|---|---|---|
+| Image Storage | Base64 in MongoDB | Amazon S3 |
+| Average Listing Document | Approximately 1.8 MB | Under 2.4 KB |
+| Database Cache Load | High | Reduced |
+| Storage Architecture | Embedded images | External object references |
 
+**Observed reduction in average listing document size: More than 99.8%.**
+
+### ML Service Performance
+
+| Endpoint | Function | Average Latency |
+|---|---|---:|
+| `/ai/price-predict` | Price estimation | 42 ms |
+| `/ai/fraud-score` | Fraud detection | 68 ms |
+| `/ai/assess-listing` | Combined assessment | 94 ms |
+
+### Model Validation Results
+
+| Model | Evaluation Metric | Reported Result |
+|---|---|---:|
+| Price Model | MAE | ₹333.99 |
+| Price Model | MAPE | 8.71% |
+| Price Model | RMSE | ₹883.63 |
+| Price Model | R² | 0.986 |
+| Fraud Model | ROC-AUC | 0.9978 |
+| Fraud Model | Average Precision | 0.9739 |
+
+**Important:** The ML models were trained and evaluated using a synthetic corpus modelled on depreciation curves. These results demonstrate the working pipeline and performance on the synthetic dataset; they do not establish equivalent accuracy on real student listings.
+
+## 11. Health Monitoring and Resilience
+
+The deployment provides health endpoints for checking the availability of the independent cloud services.
+
+| Endpoint | Purpose |
+|---|---|
+| `http://3.27.108.165/` | Frontend availability |
+| `http://3.27.108.165/api/health` | Backend, Atlas and S3 health |
+| `https://campus-marketplace-cloud.onrender.com/health` | ML service and model availability |
+
+### Failure Handling
+
+| Failure Scenario | Current System Response |
+|---|---|
+| Render service unavailable | Express uses heuristic pricing |
+| ML model files missing or incompatible | Models are retrained during service startup |
+| Atlas unavailable during development | In-memory database fallback |
+| EC2 instance failure | Web tier unavailable until instance recovery |
+| Inter-cloud network delay | Asynchronous requests keep API responsive |
+
+The backend also performs two housekeeping tasks every five minutes:
+- Releases expired checkout reservations.
+- Deletes uploaded images that are not referenced by any listing.
+
+Security-relevant actions are recorded in a dedicated MongoDB Atlas audit collection.
+
+## 12. Limitations
+
+The current implementation has the following technical limitations:
+
+1. **Single EC2 Instance:** The web tier operates in one Availability Zone without load balancing or automatic failover.
+2. **HTTP-Only Public Access:** Browser-to-server traffic is not currently encrypted using HTTPS.
+3. **Synthetic ML Dataset:** The models require validation and retraining using real-world transaction data.
+4. **Free-Tier Constraints:** Render cold starts and MongoDB Atlas capacity limitations can affect service responsiveness.
+5. **Manual Deployment:** Application updates are currently pulled and rebuilt manually on EC2.
+6. **Development Payment Mode:** The payment gateway operates in development mode rather than live payment clearing.
+
+## 13. Future Enhancements
+
+The following improvements are proposed for future production deployment:
+
+- **HTTPS and Custom Domain:** Enable TLS using a suitable certificate and custom domain.
+- **Amazon CloudFront:** Introduce CDN-based delivery for static assets and listing photographs.
+- **High Availability:** Deploy EC2 instances across multiple Availability Zones using an Elastic Load Balancer and Auto Scaling.
+- **Amazon CloudWatch:** Implement continuous monitoring, metrics, logs and alarms.
+- **CI/CD Pipeline:** Automate testing, building and deployment through GitHub Actions.
+- **S3 Lifecycle Management:** Introduce lifecycle policies and object versioning.
+- **Containerization:** Package the API and ML service into containers and explore Amazon EKS for orchestration as the system grows.
+- **Real-World ML Training:** Retrain and validate the models using actual marketplace transaction data.
+
+## 14. Live Deployment and Resources
+
+| Resource | Link |
+|---|---|
+| Web Application | http://3.27.108.165/ |
+| API Health Check | http://3.27.108.165/api/health |
+| ML Service | https://campus-marketplace-cloud.onrender.com |
+| ML Health Check | https://campus-marketplace-cloud.onrender.com/health |
+| Source Code | [GitHub Repository](https://github.com/Raksha-Pandey/Campus-Marketplace-Cloud) |
+
+## 15. Project Structure
+
+The repository contains the following primary directories:
+
+```text
+Campus-Marketplace-Cloud/
+│
+├── ml-service/          # Machine learning microservice
+├── public/              # Static frontend assets
+├── server/              # Backend application
+├── src/                 # Frontend source code
+│
+├── .env.example         # Example environment configuration
+├── .gitignore
+├── PROJECT_JOURNAL.md
+├── README.md
+├── index.html
+├── package.json
+├── package-lock.json
+└── vite.config.js
 ```
-GOOGLE_CLIENT_ID=....apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=GOCSPX-...
-GOOGLE_REDIRECT_URI=http://localhost:5001/api/auth/google/callback
-FRONTEND_URL=http://localhost:5174
-```
 
-Google Cloud → Credentials → OAuth client (Web):
+## 16. Project Information
 
-- Origins: `http://localhost:5173`, `http://localhost:5174`, `http://127.0.0.1:5173`, `http://127.0.0.1:5174`
-- Redirect URI: `http://localhost:5001/api/auth/google/callback`
+**Project Title:** Multi-Cloud Deployment and Architecture of Campus Marketplace: A Secure and Scalable Peer-to-Peer Academic Platform
 
-Gmail and allowed college Google accounts (e.g. `@thapar.edu` if it is a Google account) can sign in. Password+OTP remains for seed/demo college emails.
+**Course:** Cloud Computing Laboratory
 
-Without client ID **and** secret, tapping Continue with Google shows a setup page. Restart `npm run server` after editing `.env`.
+**Department:** Computer Science and Engineering
 
-## API overview
+**Institution:** Thapar Institute of Engineering and Technology, Patiala
 
-All marketplace routes (except `/api/health`, `/api/auth/*`, `/api/categories`) require `Authorization: Bearer <jwt>` and a **verified** college email.
+**Academic Session:** 2026–2027
 
-- Auth: `GET /api/auth/google/start` `GET /api/auth/google/callback` `POST /api/auth/google` `register` `verify` `login` `logout`
-- Listings: `GET/POST /api/listings` `GET/PUT/DELETE /api/listings/:id` `GET /api/listings/mine` `POST /api/listings/:id/verify` `POST /api/listings/:id/verify/resend`
-- AI: `POST /api/ai/price-predict` `POST /api/ai/fraud-score` (ML service also exposes `POST /ai/assess-listing`, `GET /ai/model-info`, `GET /ai/fraud-model-info`)
-- Location: `PUT /api/location/preferences` `PUT /api/location` `GET /api/location/nearby`
-- Messages: `GET/POST /api/messages` `GET /api/messages/:conversationId`
-- Transactions: `POST /api/transactions` `POST .../approve` `PUT .../due-date` `PUT .../return` `POST .../extend`
-- Watchlist: `GET/POST /api/watchlist` `PUT /api/watchlist/:listingId` (alert threshold) `DELETE /api/watchlist/:listingId`
-- Reports: `POST /api/reports` `GET /api/reports/mine`
-- Profile: `PUT /api/users/me` `GET /api/users/avatar-options`
-- Notifications: `GET /api/notifications` `PUT /api/notifications/:id/read`
-- Payments: `GET /api/payments/config` `GET /api/payments` `POST /api/payments/create-order` `verify` `webhook` `:id/refund` (admin) `GET /api/payments/:id`
-- Uploads: `GET /api/uploads/status` `POST /api/uploads/images` `DELETE /api/uploads/images/:id`
-- Listing location: `PUT /api/listings/:id/location`
-- Trust: `GET /api/users/:id/trust-score`
-- Admin: `GET /api/admin/fraud-alerts` `PUT /api/admin/listings/:id/review` `GET /api/admin/reports` `PUT /api/admin/reports/:id` `GET /api/admin/users` `PUT /api/admin/users/:id/suspend` `GET /api/admin/analytics` `GET/PUT /api/admin/settings` `GET /api/admin/audit` `GET /api/admin/fraud-model`
+### Contributors
 
-## Testing
+- Raksha Pandey
+- Shweta Agarwal
+- Shrasthi Singh Rathore
 
-```bash
-npm run lint
-npm run build
-npm run test:api   # 50 API tests (uploads, payments, location, price wiring, fraud engine, reports, admin, alerts, trust)
-npm run test:ml    # 17 model tests: 8 price + 9 fraud (needs the ML python deps)
-```
+**Project Supervisor:** Ishani Rana
 
-ML after training: `curl -s http://127.0.0.1:8000/health`
+---
 
-### Manual checklist
-
-1. Register with `user@gmail.com` + password → use Google Sign-In instead.
-2. Register `@campus.edu` or `@thapar.edu` → OTP → verify → marketplace.
-3. Login as Riya → browse Buy/Borrow, search, open a listing.
-4. Sell/Lend: add photos (they upload immediately), fill original price, condition, age, brand → AI range appears → set your own asking price → publish.
-5. Profile → enable nearby discovery → allow browser location. Publish an item with “Show in nearby searches” ticked → Buy/Borrow “Nearby only” (drag the radius).
-6. Request to borrow → lender (other seed user) approves on Loans & payments → due label → request extension → mark returned → lender confirms → COMPLETED.
-7. Buy now → checkout. Without Razorpay keys, use **Simulate signed success** (HMAC verified on server). Invalid signature fails.
-8. Sell an item with “urgent, pay advance on whatsapp 98xxxxxxxx” and a price far below the AI range → held (HIGH). Admin login → Admin console → Fraud alerts shows the score, reasons and signals → approve / reject.
-9. A MEDIUM listing shows **needs verification** in My listings → enter the emailed code (shown on screen in dev mode) → it goes live.
-10. Watch an item, set “drop of at least 10 %”, lower its price as the seller → notification appears.
-11. Report a listing / chat message → Admin console → Reports → confirm → accused trust score drops (Profile → score history).
-12. Admin → Users → suspend a student → they are logged out and their listings are hidden; unsuspend restores them.
-13. Unverified users cannot load listings (401/403). Students cannot open admin alerts (403).
-
-## Known limitations
-
-- **Google OAuth**: without `GOOGLE_CLIENT_ID`, Continue with Google is disabled. Create a Web client ID in Google Cloud.
-- **SMTP**: without `SMTP_*`, OTP is not emailed (console / `DEV_RETURN_OTP`).
-- **Razorpay**: not tested here with real keys (dev mode + signed webhook payloads only). Try `rzp_test_` keys first.
-- **Cloudinary**: the SDK calls are covered by stubbed tests; try it with your own free account.
-- **MongoDB Atlas**: optional; local or in-memory works.
-- **ML**: trained on synthetic data until real sales exist (see above).
-- No map API key is required (browser Geolocation + geohash only).
-
-## Cloud Deployment
-
-The deployed application uses:
-
-- **AWS EC2:** Hosts the React frontend and Express backend.
-- **Nginx:** Serves the frontend and proxies backend API requests.
-- **MongoDB Atlas:** Cloud database.
-- **AWS S3:** Stores listing images.
-- **Render:** Hosts the FastAPI price recommendation and fraud detection service.
-
-Application: http://3.27.108.165
-
-ML service: https://campus-marketplace-cloud.onrender.com
-
-### Local Setup
-
-Clone the cloud integration branch:
-
-```bash
-git clone -b cloud-integration https://github.com/Raksha-Pandey/Campus-Marketplace-Cloud.git
-cd Campus-Marketplace-Cloud
-npm install
-npm install --prefix server
-cp server/.env.example server/.env
-```
+<p align="center">
+  <b>Campus Marketplace</b><br/>
+  Demonstrating secure, decoupled and resilient multi-cloud application deployment.
+</p>
